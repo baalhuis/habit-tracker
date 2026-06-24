@@ -324,7 +324,7 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-gray-50">
-      <div className="max-w-lg mx-auto px-4 py-12">
+      <div className="max-w-lg mx-auto px-4 pt-6 pb-10 sm:pt-12 sm:pb-16">
         <div className="mb-6">
           <h1 className="text-3xl font-bold text-gray-900">Habit Tracker</h1>
           <p className="mt-1 text-gray-500">{today}</p>
@@ -434,12 +434,12 @@ export default function Home() {
                     // ── Normal display ────────────────────────────────────────
                     <div className="flex items-center gap-3">
                       {/* Reorder buttons */}
-                      <div className="flex flex-col gap-0.5 flex-shrink-0">
+                      <div className="flex flex-col flex-shrink-0 -my-1">
                         <button
                           type="button"
                           onClick={() => moveHabit(habit.id, -1)}
                           disabled={idx === 0}
-                          className="text-gray-300 hover:text-gray-500 disabled:opacity-20 transition-colors"
+                          className="p-1.5 text-gray-300 hover:text-gray-500 disabled:opacity-20 transition-colors"
                           aria-label="Move up"
                         >
                           <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
@@ -450,7 +450,7 @@ export default function Home() {
                           type="button"
                           onClick={() => moveHabit(habit.id, 1)}
                           disabled={idx === orderedHabits.length - 1}
-                          className="text-gray-300 hover:text-gray-500 disabled:opacity-20 transition-colors"
+                          className="p-1.5 text-gray-300 hover:text-gray-500 disabled:opacity-20 transition-colors"
                           aria-label="Move down"
                         >
                           <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
@@ -461,7 +461,7 @@ export default function Home() {
 
                       <button
                         onClick={() => handleToggle(habit)}
-                        className={`flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${
+                        className={`flex-shrink-0 w-8 h-8 rounded-full border-2 flex items-center justify-center transition-colors ${
                           habit.completedToday
                             ? 'bg-indigo-600 border-indigo-600'
                             : habit.isScheduledToday
@@ -471,7 +471,7 @@ export default function Home() {
                         aria-label={habit.completedToday ? 'Mark incomplete' : 'Mark complete'}
                       >
                         {habit.completedToday && (
-                          <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                          <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                           </svg>
                         )}
@@ -484,25 +484,32 @@ export default function Home() {
                             {habit.name}
                           </span>
                         </div>
-                        <div className="flex items-center gap-2 mt-0.5">
+                        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                           <span className="text-xs text-gray-400">{frequencyLabel(habit.frequency)}</span>
                           {habit.completionRate30d > 0 && (
                             <span className="text-xs text-gray-400">
                               · {Math.round(habit.completionRate30d * 100)}% last 30d
                             </span>
                           )}
+                          {/* Streak shown inline on small screens */}
+                          {habit.currentStreak > 0 && (
+                            <span className="text-xs text-orange-500 font-medium sm:hidden">
+                              🔥 {habit.currentStreak}
+                            </span>
+                          )}
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-3 flex-shrink-0">
+                      <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
                         {habit.frequency.type === 'times_per_week' && (
                           <span className="text-xs text-indigo-500 font-medium">
                             {habit.weeklyCompleted}/{habit.frequency.times}w
                           </span>
                         )}
-                        <div className="flex flex-col items-end">
+                        {/* Streak shown on right only on sm+ screens */}
+                        <div className="hidden sm:flex flex-col items-end">
                           {habit.currentStreak > 0 && (
-                            <span className="text-sm text-orange-500 font-medium">🔥 {habit.currentStreak}</span>
+                            <span data-testid="streak" className="text-sm text-orange-500 font-medium">🔥 {habit.currentStreak}</span>
                           )}
                           {habit.longestStreak > habit.currentStreak && habit.longestStreak > 0 && (
                             <span className="text-xs text-gray-400">best {habit.longestStreak}</span>
@@ -511,7 +518,7 @@ export default function Home() {
                         <button
                           type="button"
                           onClick={() => startEdit(habit)}
-                          className="text-gray-300 hover:text-indigo-400 transition-colors"
+                          className="p-2 -m-1 text-gray-300 hover:text-indigo-400 transition-colors"
                           aria-label="Edit habit"
                         >
                           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -520,7 +527,7 @@ export default function Home() {
                         </button>
                         <button
                           onClick={() => handleDelete(habit.id)}
-                          className="text-gray-300 hover:text-red-400 transition-colors"
+                          className="p-2 -m-1 text-gray-300 hover:text-red-400 transition-colors"
                           aria-label="Delete habit"
                         >
                           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

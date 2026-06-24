@@ -1,1 +1,17 @@
 @import "tailwindcss";
+
+/* Remove 300ms tap delay and blue flash on iOS */
+button,
+a,
+label,
+[role="button"] {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Safe-area padding for notched iPhones / home-bar devices */
+body {
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}

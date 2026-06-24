@@ -115,10 +115,10 @@ function WeeklyView({ habits, weekStart, completions, onToggle }: {
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[500px]">
+      <table className="w-full min-w-[420px]">
         <thead>
           <tr>
-            <th className="text-left py-2 pr-4 font-medium text-sm text-gray-500 w-40">Habit</th>
+            <th className="text-left py-2 pr-2 font-medium text-sm text-gray-500 w-28 sm:w-40">Habit</th>
             {days.map(day => (
               <th key={day.toISOString()} className="text-center py-2 px-1 w-10">
                 <div className={`text-xs font-medium ${isToday(day) ? 'text-indigo-600' : 'text-gray-500'}`}>
@@ -134,7 +134,7 @@ function WeeklyView({ habits, weekStart, completions, onToggle }: {
         <tbody className="divide-y divide-gray-100">
           {habits.map(habit => (
             <tr key={habit.id} className="hover:bg-gray-50">
-              <td className="py-3 pr-4 text-sm text-gray-700 font-medium truncate max-w-[160px]">
+              <td className="py-3 pr-2 text-sm text-gray-700 font-medium truncate max-w-[110px] sm:max-w-[160px]">
                 {habit.name}
               </td>
               {days.map(day => (
@@ -326,6 +326,7 @@ export default function CalendarView({ habits }: { habits: HabitWithStreak[] }) 
             completions={completions}
             onToggle={handleToggle}
           />
+          <p className="mt-2 text-center text-xs text-gray-300 sm:hidden">← scroll →</p>
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
