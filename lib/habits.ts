@@ -165,6 +165,48 @@ function calcTimesPerWeekLongest(dates: string[], times: number): number {
   return longest
 }
 
+function calcCompletionRate30d(dates: string[], frequency: Frequency): number {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const start = new Date(today)
+  start.setDate(start.getDate() - 29)
+
+  const dateSet = new Set(dates)
+  let scheduled = 0, completed = 0
+
+  if (frequency.type === 'times_per_week') {
+    // Count the last 4 full weeks (Mon–Sun) before the current week
+    const thisWeekStart = getMonday(today)
+    for (let w = 1; w <= 4; w++) {
+      const wStart = new Date(thisWeekStart)
+      wStart.setDate(wStart.getDate() - w * 7)
+      const wEnd = new Date(wStart)
+      wEnd.setDate(wEnd.getDate() + 7)
+      const count = dates.filter(d => {
+        const dt = new Date(d + 'T00:00:00')
+        return dt >= wStart && dt < wEnd
+      }).length
+      scheduled += frequency.times
+      completed += Math.min(count, frequency.times)
+    }
+    return scheduled === 0 ? 0 : completed / scheduled
+  }
+
+  const d = new Date(start)
+  while (d <= today) {
+    const isScheduled =
+      frequency.type === 'daily' ||
+      (frequency.type === 'specific_days' && frequency.days.includes(d.getDay()))
+    if (isScheduled) {
+      scheduled++
+      if (dateSet.has(toLocalDateString(d))) completed++
+    }
+    d.setDate(d.getDate() + 1)
+  }
+
+  return scheduled === 0 ? 0 : completed / scheduled
+}
+
 function calcLongestStreak(dates: string[], frequency: Frequency): number {
   switch (frequency.type) {
     case 'daily': return calcDailyLongest(dates)
@@ -215,6 +257,7 @@ export async function getHabitsWithStreaks(): Promise<HabitWithStreak[]> {
       currentStreak: calcStreak(habitDates, frequency),
       longestStreak: calcLongestStreak(habitDates, frequency),
       weeklyCompleted: getWeeklyCompleted(habitDates),
+      completionRate30d: calcCompletionRate30d(habitDates, frequency),
     }
   })
 }

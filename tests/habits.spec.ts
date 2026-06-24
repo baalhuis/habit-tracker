@@ -75,19 +75,21 @@ test('can delete a habit', async ({ page }) => {
   await expect(page.getByText(`${TEST_PREFIX} Read`)).not.toBeVisible()
 })
 
-test('completion summary increments when checking a habit', async ({ page }) => {
+test('progress bar increments when checking a habit', async ({ page }) => {
   await page.goto('/')
   await page.fill('input[placeholder="Add a new habit…"]', `${TEST_PREFIX} Habit A`)
   await page.click('button[type="submit"]')
   await expect(page.getByText(`${TEST_PREFIX} Habit A`)).toBeVisible()
 
-  const summaryBefore = await page.locator('p.text-center').last().textContent() ?? ''
-  const [doneBefore] = summaryBefore.match(/\d+/) ?? ['0']
+  // Read the current done count before checking
+  const counterBefore = await page.getByTestId('progress-counter').textContent() ?? '0/0'
+  const doneBefore = parseInt(counterBefore.split('/')[0])
 
   const habitRow = page.locator('li').filter({ hasText: `${TEST_PREFIX} Habit A` })
   await habitRow.locator('button[aria-label="Mark complete"]').click()
 
-  await expect(page.locator('p.text-center').last()).toContainText(`${parseInt(doneBefore) + 1} /`)
+  // Done count should increase by 1
+  await expect(page.getByTestId('progress-counter')).toContainText(`${doneBefore + 1}/`)
 })
 
 // ── Frequency picker ───────────────────────────────────────────────────────
@@ -267,6 +269,69 @@ test('calendar month view places dates in correct weekday columns', async ({ pag
   expect(await colOf('2026-06-01')).toBe(0)  // Monday → col 0 (Mo)
   expect(await colOf('2026-06-30')).toBe(1)  // Tuesday → col 1 (Tu) — last day
   expect(await colOf('2026-06-07')).toBe(6)  // Sunday → col 6 (Su)
+})
+
+// ── Progress bar ───────────────────────────────────────────────────────────
+
+test('progress bar shows scheduled habit count', async ({ page }) => {
+  await page.goto('/')
+
+  // Record baseline total
+  const counterBase = await page.getByTestId('progress-counter').textContent() ?? '0/0'
+  const totalBase = parseInt(counterBase.split('/')[1])
+
+  await page.fill('input[placeholder="Add a new habit…"]', `${TEST_PREFIX} Bar A`)
+  await page.click('button[type="submit"]')
+  await page.fill('input[placeholder="Add a new habit…"]', `${TEST_PREFIX} Bar B`)
+  await page.click('button[type="submit"]')
+  await expect(page.getByText(`${TEST_PREFIX} Bar B`)).toBeVisible()
+
+  // Total should have increased by 2 (both are daily)
+  await expect(page.getByTestId('progress-counter')).toContainText(`/${totalBase + 2}`)
+})
+
+// ── All-done celebration ───────────────────────────────────────────────────
+
+test('shows celebration when all scheduled habits done', async ({ page }) => {
+  await page.goto('/')
+  await page.fill('input[placeholder="Add a new habit…"]', `${TEST_PREFIX} Only Habit`)
+  await page.click('button[type="submit"]')
+  await expect(page.getByText(`${TEST_PREFIX} Only Habit`)).toBeVisible()
+
+  // Mark every unchecked habit complete (including pre-existing ones)
+  const markComplete = page.locator('button[aria-label="Mark complete"]')
+  while ((await markComplete.count()) > 0) {
+    await markComplete.first().click()
+    await page.waitForTimeout(300)
+  }
+
+  await expect(page.getByText('All done for today!')).toBeVisible()
+})
+
+// ── Habit reordering ───────────────────────────────────────────────────────
+
+test('can reorder habits with up/down buttons', async ({ page }) => {
+  await page.goto('/')
+  await page.fill('input[placeholder="Add a new habit…"]', `${TEST_PREFIX} First`)
+  await page.click('button[type="submit"]')
+  await page.fill('input[placeholder="Add a new habit…"]', `${TEST_PREFIX} Second`)
+  await page.click('button[type="submit"]')
+  await expect(page.getByText(`${TEST_PREFIX} Second`)).toBeVisible()
+
+  // Compare vertical positions: First should appear above Second initially
+  const firstRow = page.locator('li').filter({ hasText: `${TEST_PREFIX} First` })
+  const secondRow = page.locator('li').filter({ hasText: `${TEST_PREFIX} Second` })
+  const topBefore = await firstRow.boundingBox()
+  const topSecondBefore = await secondRow.boundingBox()
+  expect(topBefore!.y).toBeLessThan(topSecondBefore!.y)
+
+  // Move Second up until it's above First
+  await secondRow.locator('button[aria-label="Move up"]').click()
+
+  // Now Second should be above First
+  const topAfter = await firstRow.boundingBox()
+  const topSecondAfter = await secondRow.boundingBox()
+  expect(topSecondAfter!.y).toBeLessThan(topAfter!.y)
 })
 
 test('calendar navigation moves to previous week', async ({ page }) => {

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { Frequency, HabitWithStreak } from '@/lib/types'
 import { getHabitsWithStreaks, addHabit, deleteHabit, toggleCompletion, updateHabit } from '@/lib/habits'
 import CalendarView from '@/app/components/CalendarView'
@@ -9,6 +9,7 @@ type Tab = 'today' | 'calendar'
 
 const DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
 const DAY_FULL = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+const ORDER_KEY = 'habit-order-v1'
 
 const EMOJIS = [
   '💧','🏃','💪','🧘','📚','😴','🥗','💊','🚴','🎯',
@@ -138,9 +139,61 @@ function FrequencyPicker({ value, onChange }: { value: Frequency; onChange: (f: 
   )
 }
 
+function loadOrder(): string[] {
+  try {
+    const raw = localStorage.getItem(ORDER_KEY)
+    return raw ? JSON.parse(raw) : []
+  } catch {
+    return []
+  }
+}
+
+function saveOrder(ids: string[]) {
+  try {
+    localStorage.setItem(ORDER_KEY, JSON.stringify(ids))
+  } catch {}
+}
+
+function applyOrder(habits: HabitWithStreak[], order: string[]): HabitWithStreak[] {
+  if (order.length === 0) return habits
+  const map = new Map(habits.map(h => [h.id, h]))
+  const ordered: HabitWithStreak[] = []
+  for (const id of order) {
+    const h = map.get(id)
+    if (h) { ordered.push(h); map.delete(id) }
+  }
+  // Append any new habits not yet in the saved order (e.g. just added)
+  for (const h of map.values()) ordered.push(h)
+  return ordered
+}
+
+function ProgressBar({ done, total }: { done: number; total: number }) {
+  if (total === 0) return null
+  const pct = Math.round((done / total) * 100)
+  const allDone = done === total
+
+  return (
+    <div className="mb-6">
+      <div className="flex justify-between items-baseline mb-1.5">
+        <span className="text-sm font-medium text-gray-700">Today</span>
+        <span data-testid="progress-counter" className={`text-sm font-semibold ${allDone ? 'text-green-600' : 'text-gray-500'}`}>
+          {done}/{total}
+        </span>
+      </div>
+      <div className="h-2 rounded-full bg-gray-200 overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all duration-500 ${allDone ? 'bg-green-500' : 'bg-indigo-500'}`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    </div>
+  )
+}
+
 export default function Home() {
   const [tab, setTab] = useState<Tab>('today')
   const [habits, setHabits] = useState<HabitWithStreak[]>([])
+  const [order, setOrder] = useState<string[]>([])
   const [newHabitName, setNewHabitName] = useState('')
   const [frequency, setFrequency] = useState<Frequency>({ type: 'daily' })
   const [emoji, setEmoji] = useState('')
@@ -155,7 +208,10 @@ export default function Home() {
   const [editFrequency, setEditFrequency] = useState<Frequency>({ type: 'daily' })
   const [saving, setSaving] = useState(false)
 
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    setOrder(loadOrder())
+    load()
+  }, [])
 
   async function load() {
     try {
@@ -218,6 +274,9 @@ export default function Home() {
   async function handleDelete(id: string) {
     try {
       await deleteHabit(id)
+      const newOrder = order.filter(oid => oid !== id)
+      setOrder(newOrder)
+      saveOrder(newOrder)
       setHabits(prev => prev.filter(h => h.id !== id))
     } catch (e) {
       setError('Failed to delete habit.')
@@ -240,6 +299,26 @@ export default function Home() {
       console.error(e)
     }
   }
+
+  const moveHabit = useCallback((id: string, dir: -1 | 1) => {
+    setHabits(prev => {
+      const sorted = applyOrder(prev, order.length ? order : prev.map(h => h.id))
+      const idx = sorted.findIndex(h => h.id === id)
+      const target = idx + dir
+      if (target < 0 || target >= sorted.length) return prev
+      const next = [...sorted]
+      ;[next[idx], next[target]] = [next[target], next[idx]]
+      const newOrder = next.map(h => h.id)
+      setOrder(newOrder)
+      saveOrder(newOrder)
+      return prev // habits state unchanged; order drives display
+    })
+  }, [order])
+
+  const orderedHabits = applyOrder(habits, order.length ? order : habits.map(h => h.id))
+  const scheduledToday = orderedHabits.filter(h => h.isScheduledToday)
+  const completedToday = scheduledToday.filter(h => h.completedToday)
+  const allDone = scheduledToday.length > 0 && completedToday.length === scheduledToday.length
 
   const today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
 
@@ -276,6 +355,10 @@ export default function Home() {
           </div>
         )}
 
+        {!loading && scheduledToday.length > 0 && (
+          <ProgressBar done={completedToday.length} total={scheduledToday.length} />
+        )}
+
         <form onSubmit={handleAdd} className="mb-8 rounded-xl bg-white border border-gray-200 px-4 py-4 shadow-sm">
           <div className="flex gap-2">
             <EmojiPicker value={emoji} onChange={setEmoji} />
@@ -303,118 +386,154 @@ export default function Home() {
         ) : habits.length === 0 ? (
           <div className="text-center text-gray-400 py-12">No habits yet. Add one above to get started.</div>
         ) : (
-          <ul className="space-y-3">
-            {habits.map(habit => (
-              <li key={habit.id} className="rounded-xl bg-white border border-gray-200 px-4 py-4 shadow-sm">
-                {editingId === habit.id ? (
-                  // ── Inline edit form ──────────────────────────────────────
-                  <div className="space-y-3">
-                    <div className="flex gap-2">
-                      <EmojiPicker value={editEmoji} onChange={setEditEmoji} />
-                      <input
-                        type="text"
-                        value={editName}
-                        onChange={e => setEditName(e.target.value)}
-                        autoFocus
-                        className="flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                        aria-label="Edit habit name"
-                      />
-                    </div>
-                    <FrequencyPicker value={editFrequency} onChange={setEditFrequency} />
-                    <div className="flex gap-2 justify-end pt-1">
-                      <button
-                        type="button"
-                        onClick={() => setEditingId(null)}
-                        className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleSave(habit.id)}
-                        disabled={saving || !editName.trim()}
-                        className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors"
-                      >
-                        {saving ? 'Saving…' : 'Save'}
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  // ── Normal display ────────────────────────────────────────
-                  <div className="flex items-center gap-4">
-                    <button
-                      onClick={() => handleToggle(habit)}
-                      className={`flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${
-                        habit.completedToday
-                          ? 'bg-indigo-600 border-indigo-600'
-                          : habit.isScheduledToday
-                            ? 'border-gray-300 hover:border-indigo-400'
-                            : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                      aria-label={habit.completedToday ? 'Mark incomplete' : 'Mark complete'}
-                    >
-                      {habit.completedToday && (
-                        <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                        </svg>
-                      )}
-                    </button>
-
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        {habit.emoji && <span className="text-base leading-none">{habit.emoji}</span>}
-                        <span className={`text-sm font-medium ${habit.completedToday ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
-                          {habit.name}
-                        </span>
+          <>
+            {allDone && (
+              <div className="mb-4 rounded-xl bg-green-50 border border-green-200 px-4 py-4 text-center">
+                <p className="text-2xl mb-1">🎉</p>
+                <p className="text-sm font-semibold text-green-800">All done for today!</p>
+                <p className="text-xs text-green-600 mt-0.5">Great work. See you tomorrow.</p>
+              </div>
+            )}
+            <ul className="space-y-3">
+              {orderedHabits.map((habit, idx) => (
+                <li key={habit.id} className="rounded-xl bg-white border border-gray-200 px-4 py-4 shadow-sm">
+                  {editingId === habit.id ? (
+                    // ── Inline edit form ──────────────────────────────────────
+                    <div className="space-y-3">
+                      <div className="flex gap-2">
+                        <EmojiPicker value={editEmoji} onChange={setEditEmoji} />
+                        <input
+                          type="text"
+                          value={editName}
+                          onChange={e => setEditName(e.target.value)}
+                          autoFocus
+                          className="flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                          aria-label="Edit habit name"
+                        />
                       </div>
-                      <span className="text-xs text-gray-400">{frequencyLabel(habit.frequency)}</span>
-                    </div>
-
-                    <div className="flex items-center gap-3 flex-shrink-0">
-                      {habit.frequency.type === 'times_per_week' && (
-                        <span className="text-xs text-indigo-500 font-medium">
-                          {habit.weeklyCompleted}/{habit.frequency.times}w
-                        </span>
-                      )}
-                      <div className="flex flex-col items-end">
-                        {habit.currentStreak > 0 && (
-                          <span className="text-sm text-orange-500 font-medium">🔥 {habit.currentStreak}</span>
-                        )}
-                        {habit.longestStreak > habit.currentStreak && habit.longestStreak > 0 && (
-                          <span className="text-xs text-gray-400">best {habit.longestStreak}</span>
-                        )}
+                      <FrequencyPicker value={editFrequency} onChange={setEditFrequency} />
+                      <div className="flex gap-2 justify-end pt-1">
+                        <button
+                          type="button"
+                          onClick={() => setEditingId(null)}
+                          className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSave(habit.id)}
+                          disabled={saving || !editName.trim()}
+                          className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+                        >
+                          {saving ? 'Saving…' : 'Save'}
+                        </button>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => startEdit(habit)}
-                        className="text-gray-300 hover:text-indigo-400 transition-colors"
-                        aria-label="Edit habit"
-                      >
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                        </svg>
-                      </button>
-                      <button
-                        onClick={() => handleDelete(habit.id)}
-                        className="text-gray-300 hover:text-red-400 transition-colors"
-                        aria-label="Delete habit"
-                      >
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
                     </div>
-                  </div>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
+                  ) : (
+                    // ── Normal display ────────────────────────────────────────
+                    <div className="flex items-center gap-3">
+                      {/* Reorder buttons */}
+                      <div className="flex flex-col gap-0.5 flex-shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => moveHabit(habit.id, -1)}
+                          disabled={idx === 0}
+                          className="text-gray-300 hover:text-gray-500 disabled:opacity-20 transition-colors"
+                          aria-label="Move up"
+                        >
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
+                          </svg>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => moveHabit(habit.id, 1)}
+                          disabled={idx === orderedHabits.length - 1}
+                          className="text-gray-300 hover:text-gray-500 disabled:opacity-20 transition-colors"
+                          aria-label="Move down"
+                        >
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </button>
+                      </div>
 
-        {!loading && habits.length > 0 && (
-          <p className="mt-6 text-center text-sm text-gray-400">
-            {habits.filter(h => h.completedToday).length} / {habits.length} completed today
-          </p>
+                      <button
+                        onClick={() => handleToggle(habit)}
+                        className={`flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${
+                          habit.completedToday
+                            ? 'bg-indigo-600 border-indigo-600'
+                            : habit.isScheduledToday
+                              ? 'border-gray-300 hover:border-indigo-400'
+                              : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                        aria-label={habit.completedToday ? 'Mark incomplete' : 'Mark complete'}
+                      >
+                        {habit.completedToday && (
+                          <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </button>
+
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          {habit.emoji && <span className="text-base leading-none">{habit.emoji}</span>}
+                          <span className={`text-sm font-medium ${habit.completedToday ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
+                            {habit.name}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="text-xs text-gray-400">{frequencyLabel(habit.frequency)}</span>
+                          {habit.completionRate30d > 0 && (
+                            <span className="text-xs text-gray-400">
+                              · {Math.round(habit.completionRate30d * 100)}% last 30d
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3 flex-shrink-0">
+                        {habit.frequency.type === 'times_per_week' && (
+                          <span className="text-xs text-indigo-500 font-medium">
+                            {habit.weeklyCompleted}/{habit.frequency.times}w
+                          </span>
+                        )}
+                        <div className="flex flex-col items-end">
+                          {habit.currentStreak > 0 && (
+                            <span className="text-sm text-orange-500 font-medium">🔥 {habit.currentStreak}</span>
+                          )}
+                          {habit.longestStreak > habit.currentStreak && habit.longestStreak > 0 && (
+                            <span className="text-xs text-gray-400">best {habit.longestStreak}</span>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => startEdit(habit)}
+                          className="text-gray-300 hover:text-indigo-400 transition-colors"
+                          aria-label="Edit habit"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                          </svg>
+                        </button>
+                        <button
+                          onClick={() => handleDelete(habit.id)}
+                          className="text-gray-300 hover:text-red-400 transition-colors"
+                          aria-label="Delete habit"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </>
         )}
         </>)}
       </div>

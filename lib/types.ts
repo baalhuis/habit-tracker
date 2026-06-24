@@ -24,4 +24,5 @@ export type HabitWithStreak = Habit & {
   currentStreak: number
   longestStreak: number
   weeklyCompleted: number
+  completionRate30d: number
 }
