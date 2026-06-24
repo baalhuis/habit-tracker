@@ -1,6 +1,12 @@
+export type Frequency =
+  | { type: 'daily' }
+  | { type: 'specific_days'; days: number[] } // 0=Sun, 1=Mon, ..., 6=Sat
+  | { type: 'times_per_week'; times: number }
+
 export type Habit = {
   id: string
   name: string
+  frequency: Frequency
   created_at: string
 }
 
@@ -13,5 +19,7 @@ export type Completion = {
 
 export type HabitWithStreak = Habit & {
   completedToday: boolean
+  isScheduledToday: boolean
   currentStreak: number
+  weeklyCompleted: number
 }
