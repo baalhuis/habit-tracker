@@ -6,6 +6,7 @@ export type Frequency =
 export type Habit = {
   id: string
   name: string
+  emoji: string
   frequency: Frequency
   created_at: string
 }
@@ -21,5 +22,7 @@ export type HabitWithStreak = Habit & {
   completedToday: boolean
   isScheduledToday: boolean
   currentStreak: number
+  longestStreak: number
   weeklyCompleted: number
+  completionRate30d: number
 }
