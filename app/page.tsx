@@ -3,6 +3,9 @@
 import { useEffect, useState } from 'react'
 import { Frequency, HabitWithStreak } from '@/lib/types'
 import { getHabitsWithStreaks, addHabit, deleteHabit, toggleCompletion } from '@/lib/habits'
+import CalendarView from '@/app/components/CalendarView'
+
+type Tab = 'today' | 'calendar'
 
 const DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
 const DAY_FULL = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -90,6 +93,7 @@ function FrequencyPicker({ value, onChange }: { value: Frequency; onChange: (f: 
 }
 
 export default function Home() {
+  const [tab, setTab] = useState<Tab>('today')
   const [habits, setHabits] = useState<HabitWithStreak[]>([])
   const [newHabitName, setNewHabitName] = useState('')
   const [frequency, setFrequency] = useState<Frequency>({ type: 'daily' })
@@ -164,10 +168,29 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-gray-50">
       <div className="max-w-lg mx-auto px-4 py-12">
-        <div className="mb-8">
+        <div className="mb-6">
           <h1 className="text-3xl font-bold text-gray-900">Habit Tracker</h1>
           <p className="mt-1 text-gray-500">{today}</p>
         </div>
+
+        {/* Tab navigation */}
+        <div className="flex gap-1 rounded-lg bg-gray-100 p-1 mb-6">
+          {(['today', 'calendar'] as const).map(t => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={`flex-1 py-2 rounded-md text-sm font-medium capitalize transition-colors ${
+                tab === t ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              {t === 'today' ? 'Today' : 'Calendar'}
+            </button>
+          ))}
+        </div>
+
+        {tab === 'calendar' ? (
+          <CalendarView habits={habits} />
+        ) : (<>
 
         {error && (
           <div className="mb-6 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
@@ -260,6 +283,7 @@ export default function Home() {
             {habits.filter(h => h.completedToday).length} / {habits.length} completed today
           </p>
         )}
+        </>)}
       </div>
     </main>
   )

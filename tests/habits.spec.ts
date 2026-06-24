@@ -15,7 +15,14 @@ async function clearTestHabits() {
 test.beforeEach(async () => { await clearTestHabits() })
 test.afterEach(async () => { await clearTestHabits() })
 
-// ── Core CRUD ──────────────────────────────────────────────────────────────
+// ── Core CRUD ─────────────────────────────────────────────────────────────
+
+// Helper: add a habit via the UI
+async function addHabitViaUI(page: import('@playwright/test').Page, name: string) {
+  await page.fill('input[placeholder="Add a new habit…"]', name)
+  await page.click('button[type="submit"]')
+  await expect(page.locator('li').filter({ hasText: name })).toBeVisible()
+}
 
 test('shows page header and add form', async ({ page }) => {
   await page.goto('/')
@@ -137,4 +144,66 @@ test('times-per-week habit shows weekly progress', async ({ page }) => {
   // Check off once — progress should go to 1/3
   await habitRow.locator('button[aria-label="Mark complete"]').click()
   await expect(habitRow.getByText('1/3w')).toBeVisible()
+})
+
+// ── Calendar tab ───────────────────────────────────────────────────────────
+
+test('can switch to calendar tab', async ({ page }) => {
+  await page.goto('/')
+  await page.click('button:has-text("Calendar")')
+  await expect(page.getByRole('button', { name: 'Week' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Month' })).toBeVisible()
+})
+
+test('calendar weekly view shows habits as rows with day columns', async ({ page }) => {
+  await page.goto('/')
+  await addHabitViaUI(page, `${TEST_PREFIX} Calendar Test`)
+
+  await page.click('button:has-text("Calendar")')
+  await expect(page.getByText(`${TEST_PREFIX} Calendar Test`)).toBeVisible()
+
+  // Should show 7 day columns (Mon–Sun)
+  for (const day of ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']) {
+    await expect(page.getByText(day, { exact: true }).first()).toBeVisible()
+  }
+})
+
+test('can mark a habit complete from the calendar weekly view', async ({ page }) => {
+  await page.goto('/')
+  await addHabitViaUI(page, `${TEST_PREFIX} Retro`)
+
+  await page.click('button:has-text("Calendar")')
+  await expect(page.getByText(`${TEST_PREFIX} Retro`)).toBeVisible()
+
+  // Click today's cell for this habit
+  const today = new Date()
+  const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+  const cell = page.locator(`button[aria-label*="${TEST_PREFIX} Retro"][aria-label*="${dateStr}"]`)
+  await cell.click()
+  // Cell should now show a checkmark (aria-label changes to "Unmark")
+  await expect(page.locator(`button[aria-label*="Unmark"][aria-label*="${TEST_PREFIX} Retro"]`)).toBeVisible()
+})
+
+test('can switch calendar to month view', async ({ page }) => {
+  await page.goto('/')
+  await addHabitViaUI(page, `${TEST_PREFIX} Monthly`)
+
+  await page.click('button:has-text("Calendar")')
+  await page.click('button:has-text("Month")')
+
+  // Should show per-habit mini calendar with the habit name
+  await expect(page.getByText(`${TEST_PREFIX} Monthly`)).toBeVisible()
+  // Month day headers should appear
+  await expect(page.getByText('Mo').first()).toBeVisible()
+})
+
+test('calendar navigation moves to previous week', async ({ page }) => {
+  await page.goto('/')
+  await page.click('button:has-text("Calendar")')
+
+  const labelBefore = await page.locator('span.text-sm.font-medium.text-gray-700').textContent()
+  await page.click('button[aria-label="Previous"]')
+  const labelAfter = await page.locator('span.text-sm.font-medium.text-gray-700').textContent()
+
+  expect(labelAfter).not.toBe(labelBefore)
 })
