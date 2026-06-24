@@ -324,14 +324,16 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-gray-50">
-      <div className="max-w-lg mx-auto px-4 pt-6 pb-10 sm:pt-12 sm:pb-16">
+      <div className="max-w-lg lg:max-w-6xl mx-auto px-4 pt-6 pb-10 sm:pt-12 sm:pb-16">
+
+        {/* Header */}
         <div className="mb-6">
           <h1 className="text-3xl font-bold text-gray-900">Habit Tracker</h1>
           <p className="mt-1 text-gray-500">{today}</p>
         </div>
 
-        {/* Tab navigation */}
-        <div className="flex gap-1 rounded-lg bg-gray-100 p-1 mb-6">
+        {/* Tab navigation — hidden on lg (both panels always visible there) */}
+        <div className="flex gap-1 rounded-lg bg-gray-100 p-1 mb-6 lg:hidden">
           {(['today', 'calendar'] as const).map(t => (
             <button
               key={t}
@@ -345,9 +347,13 @@ export default function Home() {
           ))}
         </div>
 
-        {tab === 'calendar' ? (
-          <CalendarView habits={habits} />
-        ) : (<>
+        {/* Two-column layout on lg+; single column with tabs below */}
+        <div className="lg:flex lg:gap-8 lg:items-start">
+
+        {/* ── TODAY PANEL ────────────────────────────────────────────── */}
+        <div data-testid="today-panel" className={`lg:flex-1 lg:min-w-0 ${tab === 'calendar' ? 'hidden lg:block' : ''}`}>
+
+        <h2 className="hidden lg:block text-lg font-semibold text-gray-700 mb-4">Today</h2>
 
         {error && (
           <div className="mb-6 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
@@ -542,7 +548,16 @@ export default function Home() {
             </ul>
           </>
         )}
-        </>)}
+        </div>{/* end today panel */}
+
+        {/* ── CALENDAR PANEL ─────────────────────────────────────────── */}
+        <div data-testid="calendar-panel" className={`lg:w-[520px] lg:flex-shrink-0 ${tab === 'today' ? 'hidden lg:block' : ''}`}>
+          {/* Section heading visible only on lg+ */}
+          <h2 className="hidden lg:block text-lg font-semibold text-gray-700 mb-4">Calendar</h2>
+          <CalendarView habits={habits} />
+        </div>
+
+        </div>{/* end two-column wrapper */}
       </div>
     </main>
   )

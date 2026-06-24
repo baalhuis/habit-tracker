@@ -15,14 +15,18 @@ async function clearTestHabits() {
 test.beforeEach(async () => { await clearTestHabits() })
 test.afterEach(async () => { await clearTestHabits() })
 
-// ── Core CRUD ─────────────────────────────────────────────────────────────
-
 // Helper: add a habit via the UI
 async function addHabitViaUI(page: import('@playwright/test').Page, name: string) {
   await page.fill('input[placeholder="Add a new habit…"]', name)
   await page.click('button[type="submit"]')
   await expect(page.locator('li').filter({ hasText: name })).toBeVisible()
 }
+
+// Helpers for scoping to a specific panel (both panels are visible on lg+ screens)
+const todayPanel = (page: import('@playwright/test').Page) => page.getByTestId('today-panel')
+const calendarPanel = (page: import('@playwright/test').Page) => page.getByTestId('calendar-panel')
+
+// ── Core CRUD ─────────────────────────────────────────────────────────────
 
 test('shows page header and add form', async ({ page }) => {
   await page.goto('/')
@@ -72,14 +76,15 @@ test('can delete a habit', async ({ page }) => {
   const habitRow = page.locator('li').filter({ hasText: `${TEST_PREFIX} Read` })
   await expect(habitRow).toBeVisible()
   await habitRow.locator('button[aria-label="Delete habit"]').click()
-  await expect(page.getByText(`${TEST_PREFIX} Read`)).not.toBeVisible()
+  // Scope to today panel so the calendar's td row doesn't create a strict-mode clash
+  await expect(todayPanel(page).locator('li').filter({ hasText: `${TEST_PREFIX} Read` })).not.toBeVisible()
 })
 
 test('progress bar increments when checking a habit', async ({ page }) => {
   await page.goto('/')
   await page.fill('input[placeholder="Add a new habit…"]', `${TEST_PREFIX} Habit A`)
   await page.click('button[type="submit"]')
-  await expect(page.getByText(`${TEST_PREFIX} Habit A`)).toBeVisible()
+  await expect(page.locator('li').filter({ hasText: `${TEST_PREFIX} Habit A` })).toBeVisible()
 
   // Read the current done count before checking
   const counterBefore = await page.getByTestId('progress-counter').textContent() ?? '0/0'
@@ -98,19 +103,16 @@ test('can add a specific-days habit', async ({ page }) => {
   await page.goto('/')
   await page.fill('input[placeholder="Add a new habit…"]', `${TEST_PREFIX} Run`)
 
-  // Switch to specific days
   await page.click('button:has-text("Specific days")')
 
   // Deselect all weekdays (Mon–Fri are on by default), select Mon + Wed only
-  // Default days are Mon(1)–Fri(5) — indices in the day picker buttons
   const dayButtons = page.locator('form button.rounded-full')
-  // Deselect Tue(index 1), Thu(index 3), Fri(index 4) — toggle off
   await dayButtons.nth(2).click() // Tue
   await dayButtons.nth(4).click() // Thu
   await dayButtons.nth(5).click() // Fri
 
   await page.click('button[type="submit"]')
-  await expect(page.getByText(`${TEST_PREFIX} Run`)).toBeVisible()
+  await expect(page.locator('li').filter({ hasText: `${TEST_PREFIX} Run` })).toBeVisible()
   // Should show Mon, Wed in the frequency label
   await expect(page.locator('li').filter({ hasText: `${TEST_PREFIX} Run` }).getByText('Mon')).toBeVisible()
 })
@@ -126,7 +128,7 @@ test('can add a times-per-week habit', async ({ page }) => {
   await countButtons.filter({ hasText: '4' }).click()
 
   await page.click('button[type="submit"]')
-  await expect(page.getByText(`${TEST_PREFIX} Gym`)).toBeVisible()
+  await expect(page.locator('li').filter({ hasText: `${TEST_PREFIX} Gym` })).toBeVisible()
   await expect(page.locator('li').filter({ hasText: `${TEST_PREFIX} Gym` }).getByText('4× per week')).toBeVisible()
 })
 
@@ -137,7 +139,7 @@ test('times-per-week habit shows weekly progress', async ({ page }) => {
 
   // Default is 3 — keep it
   await page.click('button[type="submit"]')
-  await expect(page.getByText(`${TEST_PREFIX} Swim`)).toBeVisible()
+  await expect(page.locator('li').filter({ hasText: `${TEST_PREFIX} Swim` })).toBeVisible()
 
   const habitRow = page.locator('li').filter({ hasText: `${TEST_PREFIX} Swim` })
   // Should show weekly progress (0/3)
@@ -159,16 +161,15 @@ test('can edit a habit name and frequency', async ({ page }) => {
   await page.locator('li').filter({ hasText: `${TEST_PREFIX} Original` })
     .locator('button[aria-label="Edit habit"]').click()
 
-  // After clicking edit the li's visible text changes to the input value,
-  // so find the form fields directly (only one edit form is open at a time)
   const nameInput = page.locator('input[aria-label="Edit habit name"]')
   await expect(nameInput).toBeVisible()
   await nameInput.fill(`${TEST_PREFIX} Renamed`)
 
   await page.getByRole('button', { name: 'Save' }).click()
 
-  await expect(page.getByText(`${TEST_PREFIX} Renamed`)).toBeVisible()
-  await expect(page.getByText(`${TEST_PREFIX} Original`)).not.toBeVisible()
+  // Scope to today panel to avoid strict-mode clash with calendar td cells
+  await expect(todayPanel(page).getByText(`${TEST_PREFIX} Renamed`)).toBeVisible()
+  await expect(todayPanel(page).locator('li').filter({ hasText: `${TEST_PREFIX} Original` })).not.toBeVisible()
 })
 
 test('can set an emoji on a habit', async ({ page }) => {
@@ -182,10 +183,13 @@ test('can set an emoji on a habit', async ({ page }) => {
   await expect(habitRow.getByText('💧')).toBeVisible()
 })
 
-
 // ── Calendar tab ───────────────────────────────────────────────────────────
+// On lg+ screens the calendar panel is always visible alongside the today panel.
+// Tests that specifically test the tab-switching UI run at mobile viewport.
 
 test('can switch to calendar tab', async ({ page }) => {
+  // Tab switcher only visible below lg (1024px)
+  await page.setViewportSize({ width: 375, height: 812 })
   await page.goto('/')
   await page.click('button:has-text("Calendar")')
   await expect(page.getByRole('button', { name: 'Week' })).toBeVisible()
@@ -196,12 +200,12 @@ test('calendar weekly view shows habits as rows with day columns', async ({ page
   await page.goto('/')
   await addHabitViaUI(page, `${TEST_PREFIX} Calendar Test`)
 
-  await page.click('button:has-text("Calendar")')
-  await expect(page.getByText(`${TEST_PREFIX} Calendar Test`)).toBeVisible()
+  // Calendar panel is always visible on desktop — no tab click needed
+  await expect(calendarPanel(page).getByText(`${TEST_PREFIX} Calendar Test`)).toBeVisible()
 
   // Should show 7 day columns (Mon–Sun)
   for (const day of ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']) {
-    await expect(page.getByText(day, { exact: true }).first()).toBeVisible()
+    await expect(calendarPanel(page).getByText(day, { exact: true }).first()).toBeVisible()
   }
 })
 
@@ -209,8 +213,7 @@ test('can mark a habit complete from the calendar weekly view', async ({ page })
   await page.goto('/')
   await addHabitViaUI(page, `${TEST_PREFIX} Retro`)
 
-  await page.click('button:has-text("Calendar")')
-  await expect(page.getByText(`${TEST_PREFIX} Retro`)).toBeVisible()
+  await expect(calendarPanel(page).getByText(`${TEST_PREFIX} Retro`)).toBeVisible()
 
   // Click today's cell for this habit
   const today = new Date()
@@ -225,20 +228,18 @@ test('can switch calendar to month view', async ({ page }) => {
   await page.goto('/')
   await addHabitViaUI(page, `${TEST_PREFIX} Monthly`)
 
-  await page.click('button:has-text("Calendar")')
+  // Calendar panel is always visible on desktop
   await page.click('button:has-text("Month")')
 
-  // Should show per-habit mini calendar with the habit name
-  await expect(page.getByText(`${TEST_PREFIX} Monthly`)).toBeVisible()
+  await expect(calendarPanel(page).getByText(`${TEST_PREFIX} Monthly`)).toBeVisible()
   // Month day headers should appear
-  await expect(page.getByText('Mo').first()).toBeVisible()
+  await expect(calendarPanel(page).getByText('Mo').first()).toBeVisible()
 })
 
 test('calendar month view places dates in correct weekday columns', async ({ page }) => {
   await page.goto('/')
   await addHabitViaUI(page, `${TEST_PREFIX} GridCheck`)
 
-  await page.click('button:has-text("Calendar")')
   await page.click('button:has-text("Month")')
 
   // Wait for the mini calendar to finish loading (loading spinner disappears)
@@ -247,12 +248,12 @@ test('calendar month view places dates in correct weekday columns', async ({ pag
   await expect(page.locator('button[aria-label*="GridCheck"]').first()).toBeVisible()
 
   // Navigate to June 2026 if not already there
-  const getLabel = () => page.locator('span.font-medium.text-gray-700').textContent()
+  const getLabel = () => calendarPanel(page).locator('span.font-medium.text-gray-700').textContent()
   let label = await getLabel()
   while (label && !label.includes('June 2026')) {
     const now = new Date()
     const direction = now > new Date(2026, 5, 1) ? 'Previous' : 'Next'
-    await page.click(`button[aria-label="${direction}"]`)
+    await calendarPanel(page).locator(`button[aria-label="${direction}"]`).click()
     await expect(page.getByText('Loading…')).not.toBeVisible({ timeout: 5000 })
     label = await getLabel()
   }
@@ -285,7 +286,7 @@ test('progress bar shows scheduled habit count', async ({ page }) => {
   await page.click('button[type="submit"]')
   await page.fill('input[placeholder="Add a new habit…"]', `${TEST_PREFIX} Bar B`)
   await page.click('button[type="submit"]')
-  await expect(page.getByText(`${TEST_PREFIX} Bar B`)).toBeVisible()
+  await expect(page.locator('li').filter({ hasText: `${TEST_PREFIX} Bar B` })).toBeVisible()
 
   // Total should have increased by 2 (both are daily)
   await expect(page.getByTestId('progress-counter')).toContainText(`/${totalBase + 2}`)
@@ -297,7 +298,7 @@ test('shows celebration when all scheduled habits done', async ({ page }) => {
   await page.goto('/')
   await page.fill('input[placeholder="Add a new habit…"]', `${TEST_PREFIX} Only Habit`)
   await page.click('button[type="submit"]')
-  await expect(page.getByText(`${TEST_PREFIX} Only Habit`)).toBeVisible()
+  await expect(page.locator('li').filter({ hasText: `${TEST_PREFIX} Only Habit` })).toBeVisible()
 
   // Mark every unchecked habit complete (including pre-existing ones)
   const markComplete = page.locator('button[aria-label="Mark complete"]')
@@ -317,7 +318,7 @@ test('can reorder habits with up/down buttons', async ({ page }) => {
   await page.click('button[type="submit"]')
   await page.fill('input[placeholder="Add a new habit…"]', `${TEST_PREFIX} Second`)
   await page.click('button[type="submit"]')
-  await expect(page.getByText(`${TEST_PREFIX} Second`)).toBeVisible()
+  await expect(page.locator('li').filter({ hasText: `${TEST_PREFIX} Second` })).toBeVisible()
 
   // Compare vertical positions: First should appear above Second initially
   const firstRow = page.locator('li').filter({ hasText: `${TEST_PREFIX} First` })
@@ -335,14 +336,14 @@ test('can reorder habits with up/down buttons', async ({ page }) => {
   expect(topSecondAfter!.y).toBeLessThan(topAfter!.y)
 })
 
-
 test('calendar navigation moves to previous week', async ({ page }) => {
   await page.goto('/')
-  await page.click('button:has-text("Calendar")')
+  // Calendar panel is always visible on desktop — no tab click needed
 
-  const labelBefore = await page.locator('span.text-sm.font-medium.text-gray-700').textContent()
-  await page.click('button[aria-label="Previous"]')
-  const labelAfter = await page.locator('span.text-sm.font-medium.text-gray-700').textContent()
+  const weekLabel = calendarPanel(page).locator('span.font-medium.text-gray-700')
+  const labelBefore = await weekLabel.textContent()
+  await calendarPanel(page).locator('button[aria-label="Previous"]').click()
+  const labelAfter = await weekLabel.textContent()
 
   expect(labelAfter).not.toBe(labelBefore)
 })
