@@ -178,19 +178,40 @@ export async function deleteHabit(id: string): Promise<void> {
   if (error) throw error
 }
 
-export async function toggleCompletion(habitId: string, completedToday: boolean): Promise<void> {
-  const today = toLocalDateString(new Date())
-  if (completedToday) {
+export async function toggleCompletion(habitId: string, completedOnDate: boolean, date?: string): Promise<void> {
+  const targetDate = date ?? toLocalDateString(new Date())
+  if (completedOnDate) {
     const { error } = await supabase
       .from('completions')
       .delete()
       .eq('habit_id', habitId)
-      .eq('completed_date', today)
+      .eq('completed_date', targetDate)
     if (error) throw error
   } else {
     const { error } = await supabase
       .from('completions')
-      .insert({ habit_id: habitId, completed_date: today })
+      .insert({ habit_id: habitId, completed_date: targetDate })
     if (error) throw error
   }
+}
+
+export async function getCompletionsForRange(
+  habitIds: string[],
+  from: string,
+  to: string
+): Promise<Record<string, Set<string>>> {
+  if (habitIds.length === 0) return {}
+  const { data, error } = await supabase
+    .from('completions')
+    .select('habit_id, completed_date')
+    .in('habit_id', habitIds)
+    .gte('completed_date', from)
+    .lte('completed_date', to)
+  if (error) throw error
+  const result: Record<string, Set<string>> = {}
+  for (const row of (data ?? [])) {
+    if (!result[row.habit_id]) result[row.habit_id] = new Set()
+    result[row.habit_id].add(row.completed_date)
+  }
+  return result
 }
