@@ -46,7 +46,7 @@ test('can check off a habit and see streak', async ({ page }) => {
 
   const habitRow = page.locator('li').filter({ hasText: `${TEST_PREFIX} Exercise` })
   await habitRow.locator('button[aria-label="Mark complete"]').click()
-  await expect(habitRow.getByText('🔥')).toBeVisible()
+  await expect(habitRow.getByTestId('streak')).toBeVisible()
   await expect(habitRow.locator('button[aria-label="Mark incomplete"]')).toBeVisible()
 })
 
