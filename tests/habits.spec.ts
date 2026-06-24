@@ -197,6 +197,44 @@ test('can switch calendar to month view', async ({ page }) => {
   await expect(page.getByText('Mo').first()).toBeVisible()
 })
 
+test('calendar month view places dates in correct weekday columns', async ({ page }) => {
+  await page.goto('/')
+  await addHabitViaUI(page, `${TEST_PREFIX} GridCheck`)
+
+  await page.click('button:has-text("Calendar")')
+  await page.click('button:has-text("Month")')
+
+  // Wait for the mini calendar to finish loading (loading spinner disappears)
+  await expect(page.getByText('Loading…')).not.toBeVisible({ timeout: 10000 })
+  // Wait for at least one cell button to appear
+  await expect(page.locator('button[aria-label*="GridCheck"]').first()).toBeVisible()
+
+  // Navigate to June 2026 if not already there
+  const getLabel = () => page.locator('span.font-medium.text-gray-700').textContent()
+  let label = await getLabel()
+  while (label && !label.includes('June 2026')) {
+    const now = new Date()
+    const direction = now > new Date(2026, 5, 1) ? 'Previous' : 'Next'
+    await page.click(`button[aria-label="${direction}"]`)
+    await expect(page.getByText('Loading…')).not.toBeVisible({ timeout: 5000 })
+    label = await getLabel()
+  }
+
+  const colOf = async (dateStr: string): Promise<number> =>
+    page.evaluate((sel) => {
+      const btn = document.querySelector(sel)
+      const td = btn?.closest('td')
+      const tr = td?.closest('tr')
+      if (!tr || !td) return -1
+      return Array.from(tr.querySelectorAll('td')).indexOf(td)
+    }, `button[aria-label*="${dateStr}"]`)
+
+  // June 2026: June 1 = Monday (col 0), June 30 = Tuesday (col 1 = last day)
+  expect(await colOf('2026-06-01')).toBe(0)  // Monday → col 0 (Mo)
+  expect(await colOf('2026-06-30')).toBe(1)  // Tuesday → col 1 (Tu) — last day
+  expect(await colOf('2026-06-07')).toBe(6)  // Sunday → col 6 (Su)
+})
+
 test('calendar navigation moves to previous week', async ({ page }) => {
   await page.goto('/')
   await page.click('button:has-text("Calendar")')

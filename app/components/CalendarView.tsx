@@ -189,25 +189,23 @@ function HabitMonthCalendar({ habit, year, month, completions, onToggle }: {
             <tr key={wi}>
               {week.map((day, di) => (
                 <td key={di} className="text-center py-0.5">
-                  {day ? (
-                    <div className="relative">
-                      {isToday(day) && (
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <div className="w-7 h-7 rounded-full ring-2 ring-indigo-400 ring-offset-1" />
-                        </div>
-                      )}
-                      <div className="relative">
-                        <div className="text-[10px] text-gray-300 text-center mb-0.5">{day.getDate()}</div>
-                        <Cell
-                          date={day}
-                          habit={habit}
-                          completions={completions}
-                          onToggle={onToggle}
-                          size="sm"
-                        />
-                      </div>
-                    </div>
-                  ) : <div className="w-6 h-6" />}
+                  <div className="text-[10px] text-gray-300 text-center mb-0.5">
+                    {day ? day.getDate() : ''}
+                  </div>
+                  <div className="relative w-6 h-6 mx-auto">
+                    {day && isToday(day) && (
+                      <span className="absolute inset-0 rounded-full ring-2 ring-offset-1 ring-indigo-400 pointer-events-none" />
+                    )}
+                    {day ? (
+                      <Cell
+                        date={day}
+                        habit={habit}
+                        completions={completions}
+                        onToggle={onToggle}
+                        size="sm"
+                      />
+                    ) : <div className="w-6 h-6" />}
+                  </div>
                 </td>
               ))}
             </tr>
