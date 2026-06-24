@@ -182,6 +182,7 @@ test('can set an emoji on a habit', async ({ page }) => {
   await expect(habitRow.getByText('💧')).toBeVisible()
 })
 
+
 // ── Calendar tab ───────────────────────────────────────────────────────────
 
 test('can switch to calendar tab', async ({ page }) => {
@@ -333,6 +334,7 @@ test('can reorder habits with up/down buttons', async ({ page }) => {
   const topSecondAfter = await secondRow.boundingBox()
   expect(topSecondAfter!.y).toBeLessThan(topAfter!.y)
 })
+
 
 test('calendar navigation moves to previous week', async ({ page }) => {
   await page.goto('/')
