@@ -117,6 +117,62 @@ function calcStreak(dates: string[], frequency: Frequency): number {
   }
 }
 
+function calcDailyLongest(dates: string[]): number {
+  if (dates.length === 0) return 0
+  const sorted = [...dates].sort()
+  let longest = 1, current = 1
+  for (let i = 1; i < sorted.length; i++) {
+    const diff = (new Date(sorted[i] + 'T00:00:00').getTime() - new Date(sorted[i - 1] + 'T00:00:00').getTime()) / 86400000
+    if (diff === 1) { current++; if (current > longest) longest = current }
+    else current = 1
+  }
+  return longest
+}
+
+function calcSpecificDaysLongest(dates: string[], scheduledDays: number[]): number {
+  if (dates.length === 0 || scheduledDays.length === 0) return 0
+  const dateSet = new Set(dates)
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const todayStr = toLocalDateString(today)
+  const start = new Date([...dates].sort()[0] + 'T00:00:00')
+  let longest = 0, current = 0
+  const d = new Date(start)
+  while (d <= today) {
+    if (scheduledDays.includes(d.getDay())) {
+      const ds = toLocalDateString(d)
+      if (dateSet.has(ds)) { current++; if (current > longest) longest = current }
+      else if (ds !== todayStr) current = 0
+    }
+    d.setDate(d.getDate() + 1)
+  }
+  return longest
+}
+
+function calcTimesPerWeekLongest(dates: string[], times: number): number {
+  if (dates.length === 0) return 0
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const thisWeek = getMonday(today)
+  const start = getMonday(new Date([...dates].sort()[0] + 'T00:00:00'))
+  let longest = 0, current = 0
+  let weekStart = new Date(start)
+  while (weekStart <= thisWeek) {
+    const weekEnd = new Date(weekStart); weekEnd.setDate(weekEnd.getDate() + 7)
+    const count = dates.filter(d => { const dt = new Date(d + 'T00:00:00'); return dt >= weekStart && dt < weekEnd }).length
+    if (count >= times) { current++; if (current > longest) longest = current }
+    else if (weekStart.getTime() !== thisWeek.getTime()) current = 0
+    weekStart = new Date(weekStart); weekStart.setDate(weekStart.getDate() + 7)
+  }
+  return longest
+}
+
+function calcLongestStreak(dates: string[], frequency: Frequency): number {
+  switch (frequency.type) {
+    case 'daily': return calcDailyLongest(dates)
+    case 'specific_days': return calcSpecificDaysLongest(dates, frequency.days)
+    case 'times_per_week': return calcTimesPerWeekLongest(dates, frequency.times)
+  }
+}
+
 function isScheduledToday(frequency: Frequency): boolean {
   const todayDay = new Date().getDay()
   switch (frequency.type) {
@@ -157,20 +213,26 @@ export async function getHabitsWithStreaks(): Promise<HabitWithStreak[]> {
       completedToday: habitDates.includes(today),
       isScheduledToday: isScheduledToday(frequency),
       currentStreak: calcStreak(habitDates, frequency),
+      longestStreak: calcLongestStreak(habitDates, frequency),
       weeklyCompleted: getWeeklyCompleted(habitDates),
     }
   })
 }
 
-export async function addHabit(name: string, frequency: Frequency = { type: 'daily' }): Promise<Habit> {
+export async function addHabit(name: string, frequency: Frequency = { type: 'daily' }, emoji = ''): Promise<Habit> {
   const { data, error } = await supabase
     .from('habits')
-    .insert({ name, frequency })
+    .insert({ name, frequency, emoji })
     .select()
     .single()
 
   if (error) throw error
   return data
+}
+
+export async function updateHabit(id: string, name: string, emoji: string, frequency: Frequency): Promise<void> {
+  const { error } = await supabase.from('habits').update({ name, emoji, frequency }).eq('id', id)
+  if (error) throw error
 }
 
 export async function deleteHabit(id: string): Promise<void> {

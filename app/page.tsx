@@ -2,13 +2,59 @@
 
 import { useEffect, useState } from 'react'
 import { Frequency, HabitWithStreak } from '@/lib/types'
-import { getHabitsWithStreaks, addHabit, deleteHabit, toggleCompletion } from '@/lib/habits'
+import { getHabitsWithStreaks, addHabit, deleteHabit, toggleCompletion, updateHabit } from '@/lib/habits'
 import CalendarView from '@/app/components/CalendarView'
 
 type Tab = 'today' | 'calendar'
 
 const DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
 const DAY_FULL = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
+const EMOJIS = [
+  '💧','🏃','💪','🧘','📚','😴','🥗','💊','🚴','🎯',
+  '🌟','🧠','🎨','💻','📝','🌿','🧹','🎵','☀️','🌙',
+  '🍎','🥤','🚿','🏊','📖','✏️','🎸','🐕','🏋️','🎯',
+]
+
+function EmojiPicker({ value, onChange }: { value: string; onChange: (e: string) => void }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="relative flex-shrink-0">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="w-10 h-10 rounded-lg border border-gray-300 flex items-center justify-center text-lg hover:border-indigo-400 transition-colors"
+        aria-label="Pick emoji"
+      >
+        {value || <span className="text-gray-300 text-sm select-none">😊</span>}
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute top-11 left-0 z-20 bg-white rounded-xl border border-gray-200 shadow-lg p-2 grid grid-cols-6 gap-1 w-52">
+            <button
+              type="button"
+              onClick={() => { onChange(''); setOpen(false) }}
+              className="col-span-6 text-xs text-gray-400 hover:text-gray-600 py-0.5"
+            >
+              clear
+            </button>
+            {EMOJIS.map(e => (
+              <button
+                key={e}
+                type="button"
+                onClick={() => { onChange(e); setOpen(false) }}
+                className={`w-8 h-8 text-base rounded flex items-center justify-center transition-colors ${value === e ? 'bg-indigo-100' : 'hover:bg-gray-100'}`}
+              >
+                {e}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
 
 function frequencyLabel(f: Frequency): string {
   switch (f.type) {
@@ -97,9 +143,17 @@ export default function Home() {
   const [habits, setHabits] = useState<HabitWithStreak[]>([])
   const [newHabitName, setNewHabitName] = useState('')
   const [frequency, setFrequency] = useState<Frequency>({ type: 'daily' })
+  const [emoji, setEmoji] = useState('')
   const [loading, setLoading] = useState(true)
   const [adding, setAdding] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Edit state
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editName, setEditName] = useState('')
+  const [editEmoji, setEditEmoji] = useState('')
+  const [editFrequency, setEditFrequency] = useState<Frequency>({ type: 'daily' })
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => { load() }, [])
 
@@ -125,15 +179,39 @@ export default function Home() {
     }
     setAdding(true)
     try {
-      await addHabit(name, frequency)
+      await addHabit(name, frequency, emoji)
       setNewHabitName('')
       setFrequency({ type: 'daily' })
+      setEmoji('')
       await load()
     } catch (e) {
       setError('Failed to add habit.')
       console.error(e)
     } finally {
       setAdding(false)
+    }
+  }
+
+  function startEdit(habit: HabitWithStreak) {
+    setEditingId(habit.id)
+    setEditName(habit.name)
+    setEditEmoji(habit.emoji ?? '')
+    setEditFrequency(habit.frequency)
+  }
+
+  async function handleSave(habitId: string) {
+    const name = editName.trim()
+    if (!name) return
+    setSaving(true)
+    try {
+      await updateHabit(habitId, name, editEmoji, editFrequency)
+      setEditingId(null)
+      await load()
+    } catch (e) {
+      setError('Failed to update habit.')
+      console.error(e)
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -200,6 +278,7 @@ export default function Home() {
 
         <form onSubmit={handleAdd} className="mb-8 rounded-xl bg-white border border-gray-200 px-4 py-4 shadow-sm">
           <div className="flex gap-2">
+            <EmojiPicker value={emoji} onChange={setEmoji} />
             <input
               type="text"
               value={newHabitName}
@@ -227,52 +306,106 @@ export default function Home() {
           <ul className="space-y-3">
             {habits.map(habit => (
               <li key={habit.id} className="rounded-xl bg-white border border-gray-200 px-4 py-4 shadow-sm">
-                <div className="flex items-center gap-4">
-                  <button
-                    onClick={() => handleToggle(habit)}
-                    className={`flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${
-                      habit.completedToday
-                        ? 'bg-indigo-600 border-indigo-600'
-                        : habit.isScheduledToday
-                          ? 'border-gray-300 hover:border-indigo-400'
-                          : 'border-gray-200 hover:border-gray-300'
-                    }`}
-                    aria-label={habit.completedToday ? 'Mark incomplete' : 'Mark complete'}
-                  >
-                    {habit.completedToday && (
-                      <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                      </svg>
-                    )}
-                  </button>
-
-                  <div className="flex-1 min-w-0">
-                    <span className={`text-sm font-medium ${habit.completedToday ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
-                      {habit.name}
-                    </span>
-                    <span className="ml-2 text-xs text-gray-400">{frequencyLabel(habit.frequency)}</span>
+                {editingId === habit.id ? (
+                  // ── Inline edit form ──────────────────────────────────────
+                  <div className="space-y-3">
+                    <div className="flex gap-2">
+                      <EmojiPicker value={editEmoji} onChange={setEditEmoji} />
+                      <input
+                        type="text"
+                        value={editName}
+                        onChange={e => setEditName(e.target.value)}
+                        autoFocus
+                        className="flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        aria-label="Edit habit name"
+                      />
+                    </div>
+                    <FrequencyPicker value={editFrequency} onChange={setEditFrequency} />
+                    <div className="flex gap-2 justify-end pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setEditingId(null)}
+                        className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSave(habit.id)}
+                        disabled={saving || !editName.trim()}
+                        className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+                      >
+                        {saving ? 'Saving…' : 'Save'}
+                      </button>
+                    </div>
                   </div>
-
-                  <div className="flex items-center gap-3 flex-shrink-0">
-                    {habit.frequency.type === 'times_per_week' && (
-                      <span className="text-xs text-indigo-500 font-medium">
-                        {habit.weeklyCompleted}/{habit.frequency.times}w
-                      </span>
-                    )}
-                    {habit.currentStreak > 0 && (
-                      <span className="text-sm text-orange-500 font-medium">🔥 {habit.currentStreak}</span>
-                    )}
+                ) : (
+                  // ── Normal display ────────────────────────────────────────
+                  <div className="flex items-center gap-4">
                     <button
-                      onClick={() => handleDelete(habit.id)}
-                      className="text-gray-300 hover:text-red-400 transition-colors"
-                      aria-label="Delete habit"
+                      onClick={() => handleToggle(habit)}
+                      className={`flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${
+                        habit.completedToday
+                          ? 'bg-indigo-600 border-indigo-600'
+                          : habit.isScheduledToday
+                            ? 'border-gray-300 hover:border-indigo-400'
+                            : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                      aria-label={habit.completedToday ? 'Mark incomplete' : 'Mark complete'}
                     >
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                      </svg>
+                      {habit.completedToday && (
+                        <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
                     </button>
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        {habit.emoji && <span className="text-base leading-none">{habit.emoji}</span>}
+                        <span className={`text-sm font-medium ${habit.completedToday ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
+                          {habit.name}
+                        </span>
+                      </div>
+                      <span className="text-xs text-gray-400">{frequencyLabel(habit.frequency)}</span>
+                    </div>
+
+                    <div className="flex items-center gap-3 flex-shrink-0">
+                      {habit.frequency.type === 'times_per_week' && (
+                        <span className="text-xs text-indigo-500 font-medium">
+                          {habit.weeklyCompleted}/{habit.frequency.times}w
+                        </span>
+                      )}
+                      <div className="flex flex-col items-end">
+                        {habit.currentStreak > 0 && (
+                          <span className="text-sm text-orange-500 font-medium">🔥 {habit.currentStreak}</span>
+                        )}
+                        {habit.longestStreak > habit.currentStreak && habit.longestStreak > 0 && (
+                          <span className="text-xs text-gray-400">best {habit.longestStreak}</span>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => startEdit(habit)}
+                        className="text-gray-300 hover:text-indigo-400 transition-colors"
+                        aria-label="Edit habit"
+                      >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                        </svg>
+                      </button>
+                      <button
+                        onClick={() => handleDelete(habit.id)}
+                        className="text-gray-300 hover:text-red-400 transition-colors"
+                        aria-label="Delete habit"
+                      >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
                   </div>
-                </div>
+                )}
               </li>
             ))}
           </ul>

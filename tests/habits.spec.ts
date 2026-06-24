@@ -146,6 +146,40 @@ test('times-per-week habit shows weekly progress', async ({ page }) => {
   await expect(habitRow.getByText('1/3w')).toBeVisible()
 })
 
+// ── Edit & emoji ───────────────────────────────────────────────────────────
+
+test('can edit a habit name and frequency', async ({ page }) => {
+  await page.goto('/')
+  await page.fill('input[placeholder="Add a new habit…"]', `${TEST_PREFIX} Original`)
+  await page.click('button[type="submit"]')
+  await expect(page.locator('li').filter({ hasText: `${TEST_PREFIX} Original` })).toBeVisible()
+
+  await page.locator('li').filter({ hasText: `${TEST_PREFIX} Original` })
+    .locator('button[aria-label="Edit habit"]').click()
+
+  // After clicking edit the li's visible text changes to the input value,
+  // so find the form fields directly (only one edit form is open at a time)
+  const nameInput = page.locator('input[aria-label="Edit habit name"]')
+  await expect(nameInput).toBeVisible()
+  await nameInput.fill(`${TEST_PREFIX} Renamed`)
+
+  await page.getByRole('button', { name: 'Save' }).click()
+
+  await expect(page.getByText(`${TEST_PREFIX} Renamed`)).toBeVisible()
+  await expect(page.getByText(`${TEST_PREFIX} Original`)).not.toBeVisible()
+})
+
+test('can set an emoji on a habit', async ({ page }) => {
+  await page.goto('/')
+  await page.locator('button[aria-label="Pick emoji"]').click()
+  await page.locator('button:has-text("💧")').click()
+  await page.fill('input[placeholder="Add a new habit…"]', `${TEST_PREFIX} Emoji`)
+  await page.click('button[type="submit"]')
+
+  const habitRow = page.locator('li').filter({ hasText: `${TEST_PREFIX} Emoji` })
+  await expect(habitRow.getByText('💧')).toBeVisible()
+})
+
 // ── Calendar tab ───────────────────────────────────────────────────────────
 
 test('can switch to calendar tab', async ({ page }) => {
